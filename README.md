@@ -48,13 +48,15 @@ This package originally built for Laravel, but can also be used in any PHP proje
 2. Register the package with laravel in `config/app.php` under `providers` and `aliases` with the following:
 
 ``` php
-// Providers
-Novay\Avatar\ServiceProvider::class,
+'providers' => [
+    Novay\Avatar\ServiceProvider::class,
+];
 
 ...
 
-// Aliases
-'Avatar'    => Novay\Avatar\Facade::class,
+'aliases' => [
+    'Avatar'    => Novay\Avatar\Facade::class,
+];
 ```
 
 ##### Publish Config (Optional)
