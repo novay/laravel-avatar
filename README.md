@@ -142,7 +142,6 @@ $avatar = new Avatar($config);
 $avatar->create('John Doe')->toBase64();
 $avatar->create('John Doe')->save('path/to/file.png', $quality = 90);
 ```
-`$config` is just an ordinary array with same format as explained above (See [Configuration](#configuration)).
 
 ### Credits
 * Full development credit must go to [laravolt](https://github.com/laravolt). This package was taken to be compliant with [MIT](https://opensource.org/licenses/MIT) licensing standards for production use.
