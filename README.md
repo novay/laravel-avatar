@@ -39,7 +39,7 @@ This package originally built for Laravel, but can also be used in any PHP proje
 1. From your projects root folder in terminal run:
 
 ```bash
-    composer require novay/laravel-uuid
+    composer require novay/laravel-avatar
 ```
 
 * Uses package auto discovery feature, no need to edit the `config/app.php` file.
