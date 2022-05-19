@@ -17,7 +17,9 @@
         },
         {
             "name": "Noviyanto Rahmadi",
-            "email": "novay@enterwind.com"
+            "email": "novay@enterwind.com", 
+            "homepage": "https://konsola.app",
+            "role": "Developer"
         }
     ],
     "require": {
