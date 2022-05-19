@@ -123,7 +123,7 @@ You may specify custom font-family for your SVG text.
     <style>
     @font-face {
         font-family: MyFont;
-        src: url({{ asset('fonts/my-font.woff')) }});
+        src: url('{{ asset('fonts/my-font.woff')) }}');
     }
     </style>
 </head>
