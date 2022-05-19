@@ -2,10 +2,10 @@
 
 namespace Novay\Avatar;
 
-use Illuminate\Foundation\Application;
+use Laravel\Lumen\Application;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 
-class ServiceProvider extends BaseServiceProvider
+class LumenServiceProvider extends BaseServiceProvider
 {
     /**
      * Indicates if loading of the provider is deferred.
@@ -22,10 +22,10 @@ class ServiceProvider extends BaseServiceProvider
     public function register()
     {
         $this->app->bind('avatar', function (Application $app) {
+            $config = $app->make('config');
             $cache = $app->make('cache.store');
-            $config = $app['config']->get('avatar', []);
 
-            $avatar = new Avatar($config, $cache);
+            $avatar = new Avatar($config->get('avatar'), $cache);
             $avatar->setGenerator($app['avatar.generator']);
 
             return $avatar;
@@ -68,7 +68,7 @@ class ServiceProvider extends BaseServiceProvider
     /**
      * Loads a path relative to the package base directory.
      *
-     * @param  string  $path
+     * @param string $path
      * @return string
      */
     protected function packagePath($path = '')

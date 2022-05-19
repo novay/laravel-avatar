@@ -39,7 +39,7 @@ This package originally built for Laravel, but can also be used in any PHP proje
 1. From your projects root folder in terminal run:
 
 ```bash
-    composer require novay/laravel-uuid
+    composer require novay/laravel-avatar
 ```
 
 * Uses package auto discovery feature, no need to edit the `config/app.php` file.
@@ -64,7 +64,12 @@ This package originally built for Laravel, but can also be used in any PHP proje
 ``` php
 php artisan vendor:publish --provider="Novay\Avatar\ServiceProvider"
 ```
-This will create config file located in `config/novay/laravel-avatar.php`.
+This will create config file located in `config/avatar.php`.
+
+##### Lumen Service Provider
+``` php
+$app->register(Novay\Avatar\LumenServiceProvider);
+```
 
 ### Basic Usage
 
@@ -89,10 +94,43 @@ Avatar::create('Susilo Bambang Yudhoyono')->save('sample.png');
 Avatar::create('Susilo Bambang Yudhoyono')->save('sample.jpg', 100); // quality = 100
 ```
 
+#### Output as Gravatar
+
+```php
+Avatar::create('novay@enterwind.com')->toGravatar();
+// Output: http://gravatar.com/avatar/0dcae7d6d76f9a3b14588e9671c45879
+
+Avatar::create('novay@enterwind.com')->toGravatar(['d' => 'identicon', 'r' => 'pg', 's' => 100]);
+// Output: http://gravatar.com/avatar/0dcae7d6d76f9a3b14588e9671c45879?d=identicon&r=pg&s=100
+```
+Gravatar parameter reference: https://en.gravatar.com/site/implement/images/
+
 #### Output As SVG
 
 ```php
 Avatar::create('Susilo Bambang Yudhoyono')->toSvg();
+```
+
+You may specify custom font-family for your SVG text.
+```html
+<head>
+    <!--Prepare custom font family, using Google Fonts-->
+    <link href="https://fonts.googleapis.com/css?family=Laravolt" rel="stylesheet">
+
+    <!--OR-->
+
+    <!--Setup your own style-->
+    <style>
+    @font-face {
+        font-family: MyFont;
+        src: url({{ asset('fonts/my-font.woff')) }});
+    }
+    </style>
+</head>
+```
+
+```php
+Avatar::create('Susilo Bambang Yudhoyono')->setFontFamily('MyFont')->toSvg();
 ```
 
 #### Get Underlying Intervention image object
@@ -106,7 +144,7 @@ The method will return an instance of [Intervention image object](http://image.i
 #### Non-ASCII Character
 By default, this package will try to output any initials letter as it is. If the name supplied contains any non-ASCII character (e.g. ā, Ě, ǽ) then the result will depend on which font used (see config). It the font supports characters supplied, it will successfully displayed, otherwise it will not.
 
-Alternatively, we can convert all non-ascii to their closest ASCII counterparts. If no closest coutnerparts found, those characters are removed. Thanks to [Stringy](https://github.com/danielstjules/Stringy) for providing such useful functions. What we need is just change one line in `config/laravel-avatar.php`:
+Alternatively, we can convert all non-ascii to their closest ASCII counterparts. If no closest coutnerparts found, those characters are removed. Thanks to [Stringy](https://github.com/danielstjules/Stringy) for providing such useful functions. What we need is just change one line in `config/avatar.php`:
 
 ``` php
     'ascii'    => true,
@@ -149,4 +187,4 @@ $avatar->create('John Doe')->save('path/to/file.png', $quality = 90);
 * Full development credit must go to [laravolt](https://github.com/laravolt). This package was taken to be compliant with [MIT](https://opensource.org/licenses/MIT) licensing standards for production use.
 
 ## License
-Laravel UUID is licensed under the MIT license for both personal and commercial products. Enjoy!
+Laravel Avatar is licensed under the MIT license for both personal and commercial products. Enjoy!

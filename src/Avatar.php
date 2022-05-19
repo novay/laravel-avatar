@@ -7,90 +7,70 @@ use Illuminate\Contracts\Cache\Repository;
 use Intervention\Image\AbstractFont;
 use Intervention\Image\AbstractShape;
 use Intervention\Image\ImageManager;
+use Novay\Avatar\Concerns\AttributeGetter;
+use Novay\Avatar\Concerns\AttributeSetter;
 use Novay\Avatar\Generator\DefaultGenerator;
 use Novay\Avatar\Generator\GeneratorInterface;
 
 class Avatar
 {
-    protected $name;
+    use AttributeGetter;
+    use AttributeSetter;
 
+    protected $name;
     protected $chars;
     protected $shape;
     protected $width;
     protected $height;
-    protected $availableBackgrounds;
-    protected $availableForegrounds;
-    protected $fonts;
+    protected $availableBackgrounds = [];
+    protected $availableForegrounds = [];
+    protected $fonts = [];
     protected $fontSize;
+    protected $fontFamily;
     protected $borderSize = 0;
     protected $borderColor;
+    protected $borderRadius = 0;
     protected $ascii = false;
     protected $uppercase = false;
+    protected $rtl = false;
 
     /**
      * @var \Intervention\Image\Image
      */
     protected $image;
     protected $font = null;
-    protected $background = '#cccccc';
-    protected $foreground = '#ffffff';
+    protected $background = '#CCCCCC';
+    protected $foreground = '#FFFFFF';
     protected $initials = '';
-
     protected $cache;
     protected $driver;
-
     protected $initialGenerator;
-
     protected $defaultFont = __DIR__.'/../fonts/OpenSans-Bold.ttf';
+    protected $themes = [];
+    protected $theme;
+    protected $defaultTheme = [];
 
     /**
      * Avatar constructor.
      *
-     * @param array      $config
+     * @param array $config
      * @param Repository $cache
      */
     public function __construct(array $config = [], Repository $cache = null)
     {
-        $default = [
-            'driver'      => 'gd',
-            'shape'       => 'circle',
-            'chars'       => 2,
-            'backgrounds' => [$this->background],
-            'foregrounds' => [$this->foreground],
-            'fonts'       => [$this->defaultFont],
-            'fontSize'    => 48,
-            'width'       => 100,
-            'height'      => 100,
-            'ascii'       => false,
-            'uppercase'   => false,
-            'border'      => [
-                'size'  => 1,
-                'color' => 'foreground',
-            ],
-        ];
+        $this->cache = $cache ?? new ArrayStore();
+        $this->driver = $config['driver'] ?? 'gd';
+        $this->theme = $config['theme'] ?? null;
+        $this->defaultTheme = $this->validateConfig($config);
+        $this->applyTheme($this->defaultTheme);
 
-        $config += $default;
-
-        $this->driver = $config['driver'];
-        $this->shape = $config['shape'];
-        $this->chars = $config['chars'];
-        $this->availableBackgrounds = $config['backgrounds'];
-        $this->availableForegrounds = $config['foregrounds'];
-        $this->fonts = $config['fonts'];
-        $this->font = $this->defaultFont;
-        $this->fontSize = $config['fontSize'];
-        $this->width = $config['width'];
-        $this->height = $config['height'];
-        $this->ascii = $config['ascii'];
-        $this->uppercase = $config['uppercase'];
-        $this->borderSize = $config['border']['size'];
-        $this->borderColor = $config['border']['color'];
-
-        if (\is_null($cache)) {
-            $cache = new ArrayStore();
+        // Add any additional themes for further use
+        $themes = $this->resolveTheme('*', $config['themes'] ?? []);
+        foreach ($themes as $name => $config) {
+            $this->addTheme($name, $config);
         }
 
-        $this->cache = $cache;
+        $this->initTheme();
     }
 
     /**
@@ -98,7 +78,7 @@ class Avatar
      */
     public function __toString()
     {
-        return (string)$this->toBase64();
+        return (string) $this->toBase64();
     }
 
     public function setGenerator(GeneratorInterface $generator)
@@ -110,19 +90,65 @@ class Avatar
     {
         $this->name = $name;
 
-        $this->setForeground($this->getRandomForeground());
-        $this->setBackground($this->getRandomBackground());
+        $this->initTheme();
 
         return $this;
     }
 
-    public function setFont($font)
+    public function applyTheme(array $config)
     {
-        if (is_file($font)) {
-            $this->font = $font;
-        }
+        $config = $this->validateConfig($config);
+        $this->shape = $config['shape'];
+        $this->chars = $config['chars'];
+        $this->availableBackgrounds = $config['backgrounds'];
+        $this->availableForegrounds = $config['foregrounds'];
+        $this->fonts = $config['fonts'];
+        $this->font = $this->defaultFont;
+        $this->fontSize = $config['fontSize'];
+        $this->width = $config['width'];
+        $this->height = $config['height'];
+        $this->ascii = $config['ascii'];
+        $this->uppercase = $config['uppercase'];
+        $this->rtl = $config['rtl'];
+        $this->borderSize = $config['border']['size'];
+        $this->borderColor = $config['border']['color'];
+        $this->borderRadius = $config['border']['radius'];
+    }
+
+    public function addTheme(string $name, array $config)
+    {
+        $this->themes[$name] = $this->validateConfig($config);
 
         return $this;
+    }
+
+    protected function setRandomTheme()
+    {
+        $themes = $this->resolveTheme($this->theme, $this->themes);
+        if (!empty($themes)) {
+            $this->applyTheme($this->getRandomElement($themes, []));
+        }
+    }
+
+    protected function resolveTheme($theme, $config)
+    {
+        $config = collect($config);
+        $themes = [];
+
+        foreach ((array) $theme as $themeName) {
+            if (!is_string($themeName)) {
+                continue;
+            }
+            if ($themeName === '*') {
+                foreach ($config as $name => $themeConfig) {
+                    $themes[$name] = $themeConfig;
+                }
+            } else {
+                $themes[$themeName] = $config->get($themeName, []);
+            }
+        }
+
+        return $themes;
     }
 
     public function toBase64()
@@ -134,9 +160,9 @@ class Avatar
 
         $this->buildAvatar();
 
-        $base64 = $this->image->encode('data-url');
+        $base64 = (string)$this->image->encode('data-url');
 
-        $this->cache->put($key, $base64, 0);
+        $this->cache->forever($key, $base64);
 
         return $base64;
     }
@@ -157,80 +183,66 @@ class Avatar
         $radius = ($this->width - $this->borderSize) / 2;
         $center = $this->width / 2;
 
-        $svg = '<svg width="'.$this->width.'" height="'.$this->height.'">';
+        $svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'.$this->width.'" height="'.$this->height.'" viewBox="0 0 '.$this->width.' '.$this->height.'">';
 
         if ($this->shape == 'square') {
             $svg .= '<rect x="'.$x
                 .'" y="'.$y
                 .'" width="'.$width.'" height="'.$height
-                .'" stroke="'.$this->borderColor
+                .'" stroke="'.$this->getBorderColor()
                 .'" stroke-width="'.$this->borderSize
+                .'" rx="'.$this->borderRadius
                 .'" fill="'.$this->background.'" />';
         } elseif ($this->shape == 'circle') {
             $svg .= '<circle cx="'.$center
                 .'" cy="'.$center
                 .'" r="'.$radius
-                .'" stroke="'.$this->borderColor
+                .'" stroke="'.$this->getBorderColor()
                 .'" stroke-width="'.$this->borderSize
                 .'" fill="'.$this->background.'" />';
         }
 
-        $svg .= '<text x="'.$center.'" y="'.$center
-            .'" font-size="'.$this->fontSize
-            .'" fill="'.$this->foreground.'" alignment-baseline="middle" text-anchor="middle">'
-            .$this->getInitial()
-            .'</text>';
+        $svg .= '<text font-size="'.$this->fontSize;
+
+        if ($this->fontFamily) {
+            $svg .= '" font-family="'.$this->fontFamily;
+        }
+
+        $svg .= '" fill="'.$this->foreground.'" x="50%" y="50%" dy=".1em" style="line-height:1" alignment-baseline="middle" text-anchor="middle" dominant-baseline="central">';
+        $svg .= $this->getInitial();
+        $svg .= '</text>';
 
         $svg .= '</svg>';
 
         return $svg;
     }
 
-    public function setBackground($hex)
+    public function toGravatar(array $param = null)
     {
-        $this->background = $hex;
+        // Hash generation taken from https://en.gravatar.com/site/implement/images/php/
+        $hash = md5(strtolower(trim($this->name)));
 
-        return $this;
-    }
-
-    public function setForeground($hex)
-    {
-        $this->foreground = $hex;
-
-        return $this;
-    }
-
-    public function setDimension($width, $height = null)
-    {
-        if (!$height) {
-            $height = $width;
+        $attributes = [];
+        if ($this->width) {
+            $attributes['s'] = $this->width;
         }
-        $this->width = $width;
-        $this->height = $height;
 
-        return $this;
-    }
+        if (!empty($param)) {
+            $attributes = $param + $attributes;
+        }
 
-    public function setFontSize($size)
-    {
-        $this->fontSize = $size;
+        $url = sprintf('https://www.gravatar.com/avatar/%s', $hash);
 
-        return $this;
-    }
+        if (!empty($attributes)) {
+            $url .= '?';
+            ksort($attributes);
+            foreach ($attributes as $key => $value) {
+                $url .= "$key=$value&";
+            }
+            $url = substr($url, 0, -1);
+        }
 
-    public function setBorder($size, $color)
-    {
-        $this->borderSize = $size;
-        $this->borderColor = $color;
-
-        return $this;
-    }
-
-    public function setShape($shape)
-    {
-        $this->shape = $shape;
-
-        return $this;
+        return $url;
     }
 
     public function getInitial()
@@ -255,11 +267,9 @@ class Avatar
         return $this->getRandomElement($this->availableForegrounds, $this->foreground);
     }
 
-    protected function setRandomFont()
+    protected function getRandomFont()
     {
-        $randomFont = $this->getRandomElement($this->fonts, $this->defaultFont);
-
-        $this->setFont($randomFont);
+        return $this->getRandomElement($this->fonts, $this->defaultFont);
     }
 
     protected function getBorderColor()
@@ -286,7 +296,9 @@ class Avatar
 
         $this->createShape();
 
-        $this->setRandomFont();
+        if (empty($this->initials)) {
+            return $this;
+        }
 
         $this->image->text(
             $this->initials,
@@ -374,15 +386,23 @@ class Avatar
 
     protected function getRandomElement($array, $default)
     {
-        if (strlen($this->name) == 0 || count($array) == 0) {
+        // Make it work for associative array
+        $array = array_values($array);
+
+        $name = $this->name;
+        if ($name === null || strlen($name) === 0) {
+            $name = chr(rand(65, 90));
+        }
+
+        if (count($array) == 0) {
             return $default;
         }
 
-        $number = ord($this->name[0]);
+        $number = ord($name[0]);
         $i = 1;
-        $charLength = strlen($this->name);
+        $charLength = strlen($name);
         while ($i < $charLength) {
-            $number += ord($this->name[$i]);
+            $number += ord($name[$i]);
             $i++;
         }
 
@@ -396,6 +416,41 @@ class Avatar
             $this->initialGenerator = new DefaultGenerator();
         }
 
-        $this->initials = $this->initialGenerator->make($this->name, $this->chars, $this->uppercase, $this->ascii);
+        $this->initials = $this->initialGenerator->make($this->name, $this->chars, $this->uppercase, $this->ascii, $this->rtl);
+    }
+
+    protected function validateConfig($config)
+    {
+        $fallback = [
+            'shape' => 'circle',
+            'chars' => 2,
+            'backgrounds' => [$this->background],
+            'foregrounds' => [$this->foreground],
+            'fonts' => [$this->defaultFont],
+            'fontSize' => 48,
+            'width' => 100,
+            'height' => 100,
+            'ascii' => false,
+            'uppercase' => false,
+            'rtl' => false,
+            'border' => [
+                'size' => 1,
+                'color' => 'foreground',
+                'radius' => 0,
+            ],
+        ];
+
+        // Handle nested config
+        $config['border'] = ($config['border'] ?? []) + ($this->defaultTheme['border'] ?? []) + $fallback['border'];
+
+        return $config + $this->defaultTheme + $fallback;
+    }
+
+    protected function initTheme()
+    {
+        $this->setRandomTheme();
+        $this->setForeground($this->getRandomForeground());
+        $this->setBackground($this->getRandomBackground());
+        $this->setFont($this->getRandomFont());
     }
 }
